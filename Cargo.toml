@@ -1,0 +1,13 @@
+[package]
+name = "learn1"
+version = "0.1.0"
+authors = ["ray33ee <30669752+ray33ee@users.noreply.github.com>"]
+edition = "2018"
+
+[dependencies]
+num-rational = "0.1.0"
+num-traits = "0.2"
+regex = "1"
+lazy_static="0.1.0"
+num="0.1.0"
+clap="1"
