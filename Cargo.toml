@@ -1,10 +1,11 @@
 [package]
-name = "learn1"
-version = "0.1.0"
+name = "chembal"
+version = "0.2.0"
 authors = ["ray33ee <30669752+ray33ee@users.noreply.github.com>"]
 edition = "2018"
 
 [dependencies]
+ndarray="0.12.0"
 num-rational = "0.1.0"
 num-traits = "0.2"
 regex = "1"

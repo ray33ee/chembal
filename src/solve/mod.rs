@@ -6,7 +6,7 @@ pub mod matrices
 
     use std::collections::HashSet;
 
-    // Represents an nxn augmented matrix
+    // Represents an augmented matrix
     pub struct Augmented {
         matrix: Vec<Vec<Ratio<i32>>>
     }
@@ -65,7 +65,7 @@ pub mod matrices
             }
         }
 
-        // Use the display trait instead of this function
+        // Use the debug trait instead of this function
         pub fn print(&self) {
             for row in self.matrix.iter() {
                 for element in row {
@@ -81,9 +81,9 @@ pub mod matrices
             let row_count = if self.matrix.len() < self.matrix[0].len() {
                 self.matrix.len()
             }
-            else {
-                self.matrix[0].len()-1
-            };
+                else {
+                    self.matrix[0].len()-1
+                };
 
             // Iterate over each row
             for i in 0..row_count {
@@ -169,45 +169,45 @@ pub mod matrices
             if self.matrix.len() == self.matrix[0].len() - 1 {
                 Err(String::from("Trivial solution detected, impossible chemical equation"))
             }
-            else {
+                else {
 
-                for index in independent_set.iter() {
-                    let mut row = Vec::new();
+                    for index in independent_set.iter() {
+                        let mut row = Vec::new();
 
-                    for i in 0..self.matrix[0].len() {
-                        if i == *index || i == self.matrix[0].len()-1 {
-                            row.push(Ratio::one())
+                        for i in 0..self.matrix[0].len() {
+                            if i == *index || i == self.matrix[0].len()-1 {
+                                row.push(Ratio::one())
+                            }
+                                else {
+                                    row.push(Ratio::zero())
+                                }
                         }
-                        else {
-                            row.push(Ratio::zero())
-                        }
+
+                        self.matrix.push(row);
+
                     }
 
-                    self.matrix.push(row);
+                    self.row_reduce();
+
+                    let mut result : Vec<i32> = Vec::new();
+
+                    let mut lm = 1;
+
+                    for i in 0..self.matrix.len() {
+                        let ratio = self.matrix[i][self.matrix[0].len() - 1];
+                        lm = num::integer::lcm(lm, *ratio.denom());
+                    }
+
+                    for i in 0..self.matrix.len() {
+                        let ratio = self.matrix[i][self.matrix[0].len() - 1] * lm;
+
+                        result.push(*(ratio.numer()));
+                    }
+
+                    Ok(result)
+
 
                 }
-
-                self.row_reduce();
-
-                let mut result : Vec<i32> = Vec::new();
-
-                let mut lm = 1;
-
-                for i in 0..self.matrix.len() {
-                    let ratio = self.matrix[i][self.matrix[0].len() - 1];
-                    lm = num::integer::lcm(lm, *ratio.denom());
-                }
-
-                for i in 0..self.matrix.len() {
-                    let ratio = self.matrix[i][self.matrix[0].len() - 1] * lm;
-
-                    result.push(*(ratio.numer()));
-                }
-
-                Ok(result)
-
-
-            }
 
 
 

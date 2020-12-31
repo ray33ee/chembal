@@ -1,2 +1,15 @@
+Version 0.2.0
+    - Complete overhaul of the string handling
+    - Regex replaced with custom parser
+    - We use string slices instead of String class
+    - Better error handling for invalid equations
+    - Charges and hydrate features now added
+    - Whitespace is not ignored
+	- Added debug and release cargo commands
+	- Added option to show user calculation time (-d)
+	- Fully changed project name to chembal
+	- Formulae ending with a closing bracket and number bug fixed
+	- Cleaner output in verbose mode
+
 Version 0.1.0
 	- Initial Commit

@@ -1,20 +1,24 @@
+
 mod solve;
+mod parser;
 
 //extern crate num;
 
 use crate::solve::matrices::Augmented;
+use crate::parser::equation_parser::TokenIterator;
+use crate::parser::equation_parser::TokenType;
+
 use num_rational::Ratio;
 use std::collections::HashMap;
 
 use num_traits::identities::One;
 use num_traits::identities::Zero;
-use regex::Regex;
 
 use clap::{Arg, App};
 
-#[macro_use] extern crate lazy_static;
+use std::time::{Instant};
 
-fn float_string_to_ratio(st: &String) -> Ratio<i32> {
+/*fn float_string_to_ratio(st: &String) -> Ratio<i32> {
     st.parse().expect("float to string parse error")
 }
 
@@ -22,12 +26,12 @@ fn get_table_simple(formula: &[u8], map: & mut HashMap<String, Ratio<i32>>, scal
 
     lazy_static! {
 
-        static ref quantity_reg: Regex = Regex::new(r"[A-Z][a-z]*[0-9]*(\.[0-9]+)?").unwrap();
-        static ref symbol_reg: Regex = Regex::new(r"[A-Z][a-z]*").unwrap();
+        //static ref quantity_reg: Regex = Regex::new(r"[A-Z][a-z]*[0-9]*(\.[0-9]+)?").unwrap();
+        //static ref symbol_reg: Regex = Regex::new(r"[A-Z][a-z]*").unwrap();
     };
 
-    //let quantity_reg: Regex = Regex::new(r"[A-Z][a-z]*[0-9]*(\.[0-9]+)?").unwrap();
-    //let symbol_reg: Regex = Regex::new(r"[A-Z][a-z]*").unwrap();
+    let quantity_reg: Regex = Regex::new(r"[A-Z][a-z]*[0-9]*(\.[0-9]+)?").unwrap();
+    let symbol_reg: Regex = Regex::new(r"[A-Z][a-z]*").unwrap();
 
     if formula.len() != 0 {
 
@@ -99,6 +103,11 @@ fn get_table(formula: &[u8], map: & mut HashMap<String, Ratio<i32>>, scalar: Rat
 
     }
 
+    //If there is still a value to ship, i.e. a closing bracket followed by a number at the end of the string, ship it
+    if ship.is_some()  {
+        get_table(ship.unwrap(), map, float_string_to_ratio(&sub) * scalar);
+    }
+
     get_table_simple(&formula[last_splice..], map, scalar);
 
 }
@@ -110,15 +119,27 @@ fn balance_equation(equation: &String, verbose: bool) -> Result<String, String> 
         //static ref symbol_reg: Regex = Regex::new(r"[A-Z][a-z]*").unwrap();
     };
 
+    let start = Instant::now();
+
     let molecule_pattern = Regex::new(r"([A-Z][a-z]*[0-9]*(\.[0-9]+)?|\(|\)[0-9]*(\.[0-9]+)?)+").unwrap();
     let term_pattern = Regex::new(r"([A-Z][a-z]*[0-9]*(\.[0-9]+)?|\(|\)[0-9]*(\.[0-9]+)?)+[\+=]?").unwrap();
     let symbol_reg: Regex = Regex::new(r"[A-Z][a-z]*").unwrap();
+
+    println!("Regex: {:?}", start.elapsed());
 
     let mut symbol_table: HashMap<String, Ratio<i32>> = HashMap::new();
 
     // Perform an initial parse to get a set of all symbols used
     for cap in symbol_reg.find_iter(equation) {
         symbol_table.insert(String::from(cap.as_str()), Ratio::zero());
+    }
+
+    if verbose {
+        print!("Symbols: ");
+        for element in symbol_table.keys() {
+            print!("{} ", element);
+        }
+        println!("\n");
     }
 
     //Construct an augmented matrix
@@ -139,7 +160,7 @@ fn balance_equation(equation: &String, verbose: bool) -> Result<String, String> 
 
     for mat in molecule_pattern.find_iter(equation){
         if verbose {
-            println!("Molecule: {}", mat.as_str());
+            print!("Molecule: {}\n\t", mat.as_str());
         }
         let mut table = symbol_table.clone();
 
@@ -156,7 +177,7 @@ fn balance_equation(equation: &String, verbose: bool) -> Result<String, String> 
             for (key, value) in table.iter() {
                 print!("( {} {} )", key, value);
             }
-            println!();
+            println!("\n");
         }
 
         let mut column: Vec<Ratio<i32>> = Vec::new();
@@ -181,8 +202,10 @@ fn balance_equation(equation: &String, verbose: bool) -> Result<String, String> 
 
     matrix.augment();
 
+    println!("Construct augmented matrix: {:?}", start.elapsed());
 
 
+    //matrix.convert();
 
     if verbose {
         println!("Augmented matrix:");
@@ -191,6 +214,9 @@ fn balance_equation(equation: &String, verbose: bool) -> Result<String, String> 
 
     matrix.row_reduce();
 
+
+    println!("Row reduction: {:?}", start.elapsed());
+
     if verbose {
         println!("Row reduced matrix:");
         matrix.print();
@@ -198,6 +224,9 @@ fn balance_equation(equation: &String, verbose: bool) -> Result<String, String> 
 
     match matrix.solve() {
         Ok(r) => {
+
+
+            println!("Matrix solved: {:?}", start.elapsed());
 
             if verbose {
                 println!("Solved matrix:");
@@ -209,7 +238,7 @@ fn balance_equation(equation: &String, verbose: bool) -> Result<String, String> 
                 for ratio in r.iter() {
                     print!("{} ", ratio);
                 }
-                println!();
+                println!("\n");
             }
             let mut output = String::new();
 
@@ -236,20 +265,219 @@ fn balance_equation(equation: &String, verbose: bool) -> Result<String, String> 
         Err(e) => Err(e)
     }
 }
+*/
+fn parse_group<'a>(group: & 'a [u8], map: & mut HashMap<& 'a [u8], Ratio<i32>>, scalar: Ratio<i32>) -> Option<u8> {
+
+    for token in TokenIterator::new(group) {
+        match token {
+            TokenType::Symbol(element, quantity) => {
+
+                let num_ref_option = map.get_mut(element);
+
+                match num_ref_option {
+                    Some(num_ref) => {
+                        *num_ref += quantity * scalar;
+                    },
+                    None => {
+                        map.insert(element, quantity * scalar);
+                    }
+                }
+            },
+            TokenType::Group(group, quantity) => {
+                let mut err = parse_group(group, map, scalar * quantity);
+                if err.is_some() {
+                    return err.take();
+                }
+            },
+            TokenType::Garbage(c) => {
+                return Some(c)
+            },
+            _ => {
+
+            }
+        }
+    }
+
+    None
+
+}
+
+fn send_column<'a>(table: & mut HashMap<&'a[u8], Ratio<i32>>,col: & mut Vec<Ratio<i32>>,
+               mat: & mut Augmented,master: HashMap<&'a [u8], Ratio<i32>>,verbose: bool) {
+    if verbose {
+        for (element, quantity) in table.iter() {
+            print!("({} {}) ", std::str::from_utf8(element).unwrap(), quantity);
+        }
+        println!("\n");
+    }
+
+    for quantity in table.values() {
+        col.push(*quantity);
+    }
+
+    mat.add_column(&col);
+
+    col.clear();
+
+    *table = master.clone();
+}
+
+fn better_solve_equation(equation: &str, verbose: bool) -> Result<String, String> {
+
+    let mut master_table = HashMap::<&[u8], Ratio<i32>>::new();
+
+    let equation_asbytes = equation.as_bytes();
+
+    //Perform the initial run looking for ions and symbols
+    for token in TokenIterator::new(equation_asbytes) {
+        match token {
+            TokenType::Symbol(s, _) => {
+                master_table.insert(s, Ratio::zero());
+            },
+            TokenType::Group(group, _) => {
+                parse_group(group, & mut master_table, Ratio::zero());
+            }
+            _ => {}
+        }
+    }
+
+    if verbose {
+        println!("Symbol table");
+        for element in master_table.keys() {
+            print!("{} ", std::str::from_utf8(element).unwrap());
+        }
+        println!("\n");
+    }
+
+    let mut symbol_table = master_table.clone();
+
+    let mut sign = Ratio::<i32>::one();
+
+    let mut matrix = Augmented::new(symbol_table.len() );
+
+    let mut column = Vec::with_capacity(symbol_table.len() );
+
+    if verbose {
+        println!("Molecule matrix");
+    }
+
+    for token in TokenIterator::new(equation_asbytes) {
+
+
+        match token {
+            TokenType::Symbol(element, quantity) => {
+
+                println!("Element: {} {}", std::str::from_utf8(element).unwrap(), quantity);
+                let num_ref = symbol_table.get_mut(element).unwrap();
+                *num_ref += quantity * sign;
+
+            },
+            TokenType::Group(group, quantity) => {
+                let err = parse_group(group, & mut symbol_table, quantity * sign);
+                if err.is_some() {
+                    return Err(format!("Invalid token '{}' in formula {}", std::str::from_utf8(&[err.unwrap()]).unwrap(), equation));
+                }
+            },
+            TokenType::Garbage(c) => {
+                return Err(format!("Invalid token '{}' in formula {}", std::str::from_utf8(&[c]).unwrap(), equation));
+            },
+            TokenType::Separator(sep) => {
+
+                send_column(& mut symbol_table, & mut column, & mut matrix, master_table.clone(),verbose);
+
+                //If the separator is an equals, flip the sign
+                if sep == 61 {
+                    sign = -Ratio::<i32>::one();
+                }
+            },
+            TokenType::Whitespace => {
+                // println!("Whitespace");
+            }
+        }
+
+    }
+
+    send_column(& mut symbol_table, & mut column, & mut matrix, master_table.clone(),verbose);
+
+    matrix.augment();
+
+    if verbose {
+        println!("Augmented matrix");
+        matrix.print();
+    }
+
+    matrix.row_reduce();
+
+    if verbose {
+        println!("Row reduced matrix");
+        matrix.print();
+    }
+
+    match matrix.solve() {
+        Ok(r) => {
+            if verbose {
+
+                println!("Solved matrix");
+                matrix.print();
+
+                println!("Solution vector");
+                for quantity in r.iter() {
+                    print!("{} ", quantity);
+                }
+                println!("\n");
+            }
+
+            let mut result = String::with_capacity(equation.len());
+            /*let equation = String::from(equation);
+            let mut start = true;
+            let mut coeff_index = 0;
+
+
+            for ch in equation.chars() {
+
+                if ch == '\n' || ch == ' ' || ch == '\t' || ch == '\r' {
+                    continue;
+                }
+
+                if start {
+                    if r[coeff_index] != 1 {
+                        result = format!("{}{}", result, r[coeff_index]);
+                    }
+
+                    result.push(ch);
+
+                    start = false;
+
+                    coeff_index += 1;
+                }
+                else {
+                    result.push(ch);
+
+                    if ch == '+' || ch == '=' {
+                        if r[coeff_index] != 1 {
+                            result = format!("{}{}", result, r[coeff_index]);
+                        }
+
+                        coeff_index += 1;
+                    }
+                }
+
+
+            }*/
+
+            Ok(result)
+        },
+        Err(e) => {
+            Err(e)
+        }
+    }
+
+}
 
 fn main() {
 
-    //let text = "H2+O2=H2O";
-    //let text = "H2SO4F3D2+NaOH=Na2SO4F2D2+H2O";
-    //let text = "H2SO4+NaOH=Na2SO4+H2O";
-    //let text = "P4O10+H2O=H3PO4";
-    //let text = "H2O=HO2";
-    //let text = "H2+O5=H3+O7";
-    //let text = "H2=H3";
-    //let text = "HNO3+Ag=AgNO3+NO2+H2O";
-
     let matches = App::new("Chemical Equation Balancer")
-        .version("0.1.0")
+        .version("0.2.0")
         .author("Will Cooper")
         .about("Command line tool to balance chemical equations")
         .arg(Arg::with_name("equation")
@@ -262,17 +490,31 @@ fn main() {
             .short("v")
             .long("verbose")
             .takes_value(false)
-            .help("Displays intermediate steps")
-        )
+            .help("Displays intermediate steps"))
+        .arg(Arg::with_name("duration")
+            .short("d")
+            .long("duration")
+            .takes_value(false)
+            .help("Shows calculation duration"))
         .get_matches();
 
+    let start = Instant::now();
 
-    match balance_equation(&String::from(
-        matches.value_of("equation").unwrap()),
-    matches.is_present("verbose")
-    ) {
-        Ok(s) => println!("Equation: {}", s),
+    let balance = better_solve_equation(
+        matches.value_of("equation").unwrap(),
+        matches.is_present("verbose"));
+
+
+    match balance {
+        Ok(s) => {
+            println!("Equation: {}", s);
+            if matches.is_present("duration") {
+                println!("Elapsed: {:?}", start.elapsed());
+            }
+        }
+        ,
         Err(e) => println!("Cannot solve equation. {}", e)
     };
+
 
 }
