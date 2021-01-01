@@ -1,9 +1,7 @@
 
 - Warn user that negative coefficients may result when molecules are on the 'wrong' side of the equation
-- Create a better algorithm that substitutes coefficients into final equation.
-    - The current algorithm works by matching occurences of '+' to identify the next molecule. However
-      this will not work when positive charges are used (i.e. {+})
-    - Implement a solution that uses the TokenIterator and identify new molecules with the TokenType::Separator
-    - White space should be ignored in the final equation
-    - Iterate over the function, and reconstruct the equation.
-        - Should Groups, Symbols, etc. contain slices of the full string too??? Yes
+- Warn user that an equation may be two equations combined
+    - Test for negative coefficients when we convert Ratio column to i32 solution vector
+- Figure out a way to parse 'H 2' as 'H2' and not as 'H', ' ' and '2'.
+- Implement proper conversion from string to Ratio
+- Time elapsed is shown iif --verbose is set, remove --duration

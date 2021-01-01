@@ -10,6 +10,7 @@ pub mod equation_parser {
 
     use num_traits::One;
 
+    //Converts a slice floating point number into a rational number
     fn float_string_to_ratio(st: &[u8]) -> Ratio<i32> {
         if st.len() == 0 {
             Ratio::one()
@@ -48,14 +49,11 @@ pub mod equation_parser {
 
     // Possible tokens returned when parsing a molecule
     pub enum TokenType<'a> {
-        Symbol(& 'a [u8], Ratio<i32>), // A symbol, followed by an optional quantity, i.e. H, Na2, Mg3, etc.
-        Group(& 'a [u8], Ratio<i32>), // A series of tokens within brackets, with optional quantity, i.e. (OH)2, (CH3), (SO4)2, etc.
-        //Charge(Ratio<i32>), //A sign with optional number, enclosed in curly brackets, i.e. {+}, {-}, {3+}, {2-}, etc.
-        //Plus, //A plus sign
-        //Equals, // An equals sign
+        Symbol(& 'a [u8], & 'a str, Ratio<i32>), // A symbol, followed by an optional quantity, i.e. H, Na2, Mg3, etc.
+        Group(& 'a [u8], & 'a str, Ratio<i32>), // A series of tokens within brackets, with optional quantity, i.e. (OH)2, (CH3), (SO4)2, etc.
         Separator(u8), //Molecule separator, either a plus or an equals
         Whitespace, //Any amount of contiguous whitespace
-        Garbage(u8)
+        Invalid(& 'a [u8])
     }
 
     //Contains information for identifying and parsing tokens
@@ -97,9 +95,7 @@ pub mod equation_parser {
                     _parse: |tok_str: & 'a [u8]| {
                         let (num_start, _, ratio) =  get_num_index(tok_str);
 
-                        //println!("num start: {}", num_start);
-
-                        TokenType::Symbol(&tok_str[..num_start], ratio)
+                        TokenType::Symbol(&tok_str[..num_start], unsafe { std::str::from_utf8_unchecked(&tok_str) },ratio)
                     },
                     _ignore_end: false
                 },
@@ -126,10 +122,19 @@ pub mod equation_parser {
 
                         let (_, num_end, num) = get_num_index(&tok_str[1..]);
 
-                        TokenType::Group(&tok_str[num_end+1..], num)
+                        TokenType::Group(&tok_str[num_end+1..], unsafe { std::str::from_utf8_unchecked(&tok_str) },num)
                     },
                     _ignore_end: false
-                },
+                }/*,
+                TokenComponent { //Electron
+                    _start_condition: |ch| *ch == 101,
+                    _end_condition: |ch| *ch != 101,
+                    _parse: |tok_str: & 'a [u8]| {
+                        println!("electron: {}", unsafe { std::str::from_utf8_unchecked(&tok_str) });
+                        TokenType::Symbol("charge".as_bytes(), unsafe { std::str::from_utf8_unchecked(&tok_str) },-Ratio::one())
+                    },
+                    _ignore_end: false
+                }*/,
                 TokenComponent { //Charge
                     _start_condition: |ch| *ch == 123,
                     _end_condition: |ch| *ch == 125,
@@ -139,9 +144,12 @@ pub mod equation_parser {
 
                         let (start, end, mut num) = get_num_index(truncated);
 
-                        if start != 0 && end != truncated.len() {
+                        /*println!("start: {}, end: {}, len: {}, slice: {}", start, end, truncated.len(), unsafe { std::str::from_utf8_unchecked(truncated) });
+
+                        if start != 0 && end != truncated.len() -1 {
                             //Number is in the middle of string, error
-                        }
+                            return TokenType::Invalid(truncated);
+                        }*/
 
                         let sign_range = if start == 0 {
                             end..truncated.len()
@@ -150,20 +158,21 @@ pub mod equation_parser {
                             0..start
                         };
 
-                        //println!("Range: {}", std::str::from_utf8(&&truncated[sign_range]).unwrap());
-
                         for ch in &truncated[sign_range] {
                             if *ch == 45 {
                                 num *= -1;
                             }
                             else if *ch != 43 {
                                 //Invalid character in charge, error
+                                return TokenType::Invalid(truncated);
                             }
 
                         }
 
-                        //println!("charge: {}", std::str::from_utf8(&tok_str).unwrap());
-                        TokenType::Symbol("charge".as_bytes(), num)
+                        //println!("charge: {}", unsafe { std::str::from_utf8_unchecked(&tok_str) });
+
+
+                        TokenType::Symbol("charge".as_bytes(), unsafe { std::str::from_utf8_unchecked(&tok_str) },num)
                     },
                     _ignore_end: true
                 }
@@ -207,12 +216,12 @@ pub mod equation_parser {
                 let ratio = float_string_to_ratio(&self._formula[index+1..num_index+1]);
                 let slice = &self._formula[self._index+1..index];
 
-                //println!("Token: {} and {}", std::str::from_utf8(&slice).unwrap(), ratio);
+                let str_slice = unsafe { std::str::from_utf8_unchecked(&self._formula[self._index..num_index+1]) };
 
                 //Advance the iterator forward
                 self._index = num_index+1;
 
-                Some(TokenType::Group(slice, ratio))
+                Some(TokenType::Group(slice, str_slice,ratio))
             }
             else {
                 // If its not, we look to COMPONENT_LIST to identify the token
@@ -246,15 +255,16 @@ pub mod equation_parser {
 
                 //println!("Token: {}", std::str::from_utf8(&self._formula[self._index..index]).unwrap());
 
-                self._index = index;
-
-                //If we haven't identified the token, return a Garbage (unrecognised) token
-                if matched {
+                //If we haven't identified the token, return it as an invalid token
+                let result = if matched {
                     result
                 } else {
-                    Some(TokenType::Garbage(first_char))
-                }
+                    Some(TokenType::Invalid(&self._formula[self._index..self._index+1]))
+                };
 
+                self._index = index;
+
+                result
 
             }
 

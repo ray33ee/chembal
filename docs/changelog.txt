@@ -1,3 +1,13 @@
+Version 0.2.1
+    - We now reconstruct the final equation correctly
+    - We now detect invalid characters within the charge component
+    - Invalid token now contains the entire error slice, not just a character
+    - Non ascii characters are now detected
+        - Because we know all our input strings, and therefore slices, are ascii only, we use from_utf8_unchecked whe converting to &str
+    - We now ensure that the input string has at least one equals sign, one reactant and one product
+    - Without --verbose and --duration, ONLY the solved equation is displayed
+    - Extra newline is prepended to duration
+
 Version 0.2.0
     - Complete overhaul of the string handling
     - Regex replaced with custom parser
