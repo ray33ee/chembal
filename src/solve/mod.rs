@@ -169,45 +169,53 @@ pub mod matrices
             if self.matrix.len() == self.matrix[0].len() - 1 {
                 Err(String::from("Trivial solution detected, impossible chemical equation"))
             }
-                else {
+            else {
 
-                    for index in independent_set.iter() {
-                        let mut row = Vec::new();
+                if independent_set.len() > 1 {
+                    return Err(String::from("Infinite standard forms detected. Hint: This could be caused by two separate equations merged together."))
+                }
 
-                        for i in 0..self.matrix[0].len() {
-                            if i == *index || i == self.matrix[0].len()-1 {
-                                row.push(Ratio::one())
-                            }
-                                else {
-                                    row.push(Ratio::zero())
-                                }
+                for index in independent_set.iter() {
+                    let mut row = Vec::new();
+
+                    for i in 0..self.matrix[0].len() {
+                        if i == *index || i == self.matrix[0].len()-1 {
+                            row.push(Ratio::one())
                         }
-
-                        self.matrix.push(row);
-
+                            else {
+                                row.push(Ratio::zero())
+                            }
                     }
 
-                    self.row_reduce();
-
-                    let mut result : Vec<i32> = Vec::new();
-
-                    let mut lm = 1;
-
-                    for i in 0..self.matrix.len() {
-                        let ratio = self.matrix[i][self.matrix[0].len() - 1];
-                        lm = num::integer::lcm(lm, *ratio.denom());
-                    }
-
-                    for i in 0..self.matrix.len() {
-                        let ratio = self.matrix[i][self.matrix[0].len() - 1] * lm;
-
-                        result.push(*(ratio.numer()));
-                    }
-
-                    Ok(result)
-
+                    self.matrix.push(row);
 
                 }
+
+                self.row_reduce();
+
+                let mut result : Vec<i32> = Vec::new();
+
+                let mut lm = 1;
+
+                for i in 0..self.matrix.len() {
+                    let ratio = self.matrix[i][self.matrix[0].len() - 1];
+                    lm = num::integer::lcm(lm, *ratio.denom());
+                }
+
+                for i in 0..self.matrix.len() {
+                    let ratio = self.matrix[i][self.matrix[0].len() - 1] * lm;
+
+                    if ratio < Ratio::zero() {
+                        return Err(format!("Negative solution. Hint: This is could be the result of reactants/products on the wrong side of an equation.\nConsider moving either all negative or all positive molecules to the other side"));
+                    }
+
+                    result.push(*(ratio.numer()));
+                }
+
+                Ok(result)
+
+
+            }
 
 
 

@@ -1,7 +1,3 @@
 
-- Warn user that negative coefficients may result when molecules are on the 'wrong' side of the equation
-- Warn user that an equation may be two equations combined
-    - Test for negative coefficients when we convert Ratio column to i32 solution vector
 - Figure out a way to parse 'H 2' as 'H2' and not as 'H', ' ' and '2'.
-- Implement proper conversion from string to Ratio
-- Time elapsed is shown iif --verbose is set, remove --duration
+- Make sure Groups with quantity 1 are parsed correctly, i.e. (S)

@@ -3,31 +3,67 @@
 
 pub mod equation_parser {
 
-
     use std::iter::Iterator;
 
-    use num_rational::Ratio;
+    use num_rational::{Ratio, Rational32};
 
     use num_traits::One;
 
-    //Converts a slice floating point number into a rational number
-    fn float_string_to_ratio(st: &[u8]) -> Ratio<i32> {
+    //Converts a string floating point number into a rational number
+    fn float_string_to_ratio(st: &[u8]) -> Result<Rational32, String> {
         if st.len() == 0 {
-            Ratio::one()
+            Ok(Ratio::one())
         } else {
-            String::from_utf8_lossy(st).parse().expect("float to string parse error")
+
+            //We try and convert using the native parse() function, this will only work if the number is an integer
+            match String::from_utf8_lossy(st).parse() {
+                Ok(number) => {
+                    Ok(number)
+                },
+                Err(_) => {
+
+                    match String::from_utf8_lossy(st).parse::<f64>() {
+                        Ok(decimal) => {
+
+                            let mut decimal_point_index = 0;
+
+                            // Get the index of the floating point
+                            for ch in st {
+                                if *ch == '.' as u8 {
+                                    break;
+                                }
+                                decimal_point_index += 1;
+                            }
+
+                            let exponent = st.len() - decimal_point_index - 1;
+
+                            let denom = 10i32.pow(exponent as u32);
+
+                            let numer: i32 = (denom as f64 * decimal) as i32;
+
+                            //println!("Numer: {}, Demon: {}", numer, denom);
+
+                            Ok(Ratio::new(numer, denom))
+                        },
+                        Err(_) => {
+                            //Invalid number
+                            Err(format!("'{}' is not a valid number", unsafe { std::str::from_utf8_unchecked(&st) }))
+                        }
+                    }
+                }
+            }
         }
     }
 
     //Get the number part of the string, with start and end index too
-    fn get_num_index(tok_str: & [u8]) -> (usize, usize, Ratio<i32>) {
+    fn get_num_index(tok_str: & [u8]) -> Result<(usize, usize, Ratio<i32>), String> {
         let mut start = 0;
         let mut end = 0;
 
         //Locate first character in number
         for ch in tok_str {
 
-            if (*ch >= 48 && *ch <= 57) || *ch == 46 {
+            if (*ch >= 48 && *ch <= 57) || *ch == '.' as u8 {
                 break;
             }
 
@@ -37,14 +73,19 @@ pub mod equation_parser {
         //Locate final character in number
         for ch in &tok_str[start..] {
 
-            if (*ch < 48 || *ch > 57) && *ch != 46 {
+            if (*ch < 48 || *ch > 57) && *ch != '.' as u8 {
                 break;
             }
 
             end += 1;
         }
 
-        (start, end, float_string_to_ratio(&tok_str[start..start+end]))
+        match float_string_to_ratio(&tok_str[start..start+end]) {
+            Ok(ratio) => Ok((start, end, ratio)),
+            Err(error) => Err(error)
+        }
+
+
     }
 
     // Possible tokens returned when parsing a molecule
@@ -53,7 +94,8 @@ pub mod equation_parser {
         Group(& 'a [u8], & 'a str, Ratio<i32>), // A series of tokens within brackets, with optional quantity, i.e. (OH)2, (CH3), (SO4)2, etc.
         Separator(u8), //Molecule separator, either a plus or an equals
         Whitespace, //Any amount of contiguous whitespace
-        Invalid(& 'a [u8])
+        Invalid(& 'a [u8]),
+        Error(& 'a str, String)
     }
 
     //Contains information for identifying and parsing tokens
@@ -88,14 +130,19 @@ pub mod equation_parser {
                 return None;
             }
 
+            #[allow(non_snake_case)]
             let COMPONENT_LIST: [TokenComponent; 5] = [
                 TokenComponent { //Symbol
                     _start_condition: |ch| *ch >= 65 && *ch <= 90,
-                    _end_condition: |ch| (*ch < 48 || *ch > 57) && (*ch < 97 || *ch > 122) && *ch != 46,
+                    _end_condition: |ch| (*ch < 48 || *ch > 57) && (*ch < 97 || *ch > 122) && *ch != '.' as u8,
                     _parse: |tok_str: & 'a [u8]| {
-                        let (num_start, _, ratio) =  get_num_index(tok_str);
 
-                        TokenType::Symbol(&tok_str[..num_start], unsafe { std::str::from_utf8_unchecked(&tok_str) },ratio)
+                        match get_num_index(tok_str) {
+                            Ok((num_start, _, ratio)) =>
+                                TokenType::Symbol(&tok_str[..num_start], unsafe { std::str::from_utf8_unchecked(&tok_str) },ratio),
+                            Err(error) =>
+                                TokenType::Error(unsafe { std::str::from_utf8_unchecked(&tok_str) }, error)
+                        }
                     },
                     _ignore_end: false
                 },
@@ -120,21 +167,17 @@ pub mod equation_parser {
                     _end_condition: |ch| *ch == 43 || *ch == 61,
                     _parse: |tok_str: & 'a [u8]| {
 
-                        let (_, num_end, num) = get_num_index(&tok_str[1..]);
+                        match get_num_index(&tok_str[1..]) {
+                            Ok((_, num_end, ratio)) =>
+                                TokenType::Group(&tok_str[num_end+1..], unsafe { std::str::from_utf8_unchecked(&tok_str) },ratio),
+                            Err(error) =>
+                                TokenType::Error(unsafe { std::str::from_utf8_unchecked(&tok_str) }, error)
+                        }
 
-                        TokenType::Group(&tok_str[num_end+1..], unsafe { std::str::from_utf8_unchecked(&tok_str) },num)
+
                     },
                     _ignore_end: false
-                }/*,
-                TokenComponent { //Electron
-                    _start_condition: |ch| *ch == 101,
-                    _end_condition: |ch| *ch != 101,
-                    _parse: |tok_str: & 'a [u8]| {
-                        println!("electron: {}", unsafe { std::str::from_utf8_unchecked(&tok_str) });
-                        TokenType::Symbol("charge".as_bytes(), unsafe { std::str::from_utf8_unchecked(&tok_str) },-Ratio::one())
-                    },
-                    _ignore_end: false
-                }*/,
+                },
                 TokenComponent { //Charge
                     _start_condition: |ch| *ch == 123,
                     _end_condition: |ch| *ch == 125,
@@ -142,42 +185,50 @@ pub mod equation_parser {
 
                         let truncated = &tok_str[1..];
 
-                        let (start, end, mut num) = get_num_index(truncated);
+                        match get_num_index(truncated) {
+                            Ok((start, end, mut ratio)) => {
 
-                        /*println!("start: {}, end: {}, len: {}, slice: {}", start, end, truncated.len(), unsafe { std::str::from_utf8_unchecked(truncated) });
+                                //println!("start: {}, end: {}, len: {}, slice: {}", start, end, truncated.len(), unsafe { std::str::from_utf8_unchecked(truncated) });
 
-                        if start != 0 && end != truncated.len() -1 {
-                            //Number is in the middle of string, error
-                            return TokenType::Invalid(truncated);
-                        }*/
+                                if start != 0 && end != truncated.len() -1 {
+                                    //Number is in the middle of string, error
+                                    return TokenType::Invalid(truncated);
+                                }
 
-                        let sign_range = if start == 0 {
-                            end..truncated.len()
-                        }
-                        else {
-                            0..start
-                        };
+                                let sign_range = if start == 0 {
+                                    end..truncated.len()
+                                }
+                                else {
+                                    0..start
+                                };
 
-                        for ch in &truncated[sign_range] {
-                            if *ch == 45 {
-                                num *= -1;
+                                for ch in &truncated[sign_range] {
+                                    if *ch == 45 {
+                                        ratio *= -1;
+                                    }
+                                        else if *ch != 43 {
+                                            //Invalid character in charge, error
+                                            return TokenType::Invalid(truncated);
+                                        }
+
+                                }
+
+                                //println!("charge: {}", unsafe { std::str::from_utf8_unchecked(&tok_str) });
+
+
+                                TokenType::Symbol("charge".as_bytes(), unsafe { std::str::from_utf8_unchecked(&tok_str) },ratio)
                             }
-                            else if *ch != 43 {
-                                //Invalid character in charge, error
-                                return TokenType::Invalid(truncated);
-                            }
-
+                            Err(error) =>
+                                TokenType::Error(unsafe { std::str::from_utf8_unchecked(&tok_str) }, error)
                         }
 
-                        //println!("charge: {}", unsafe { std::str::from_utf8_unchecked(&tok_str) });
 
 
-                        TokenType::Symbol("charge".as_bytes(), unsafe { std::str::from_utf8_unchecked(&tok_str) },num)
+
                     },
                     _ignore_end: true
                 }
             ];
-
 
             let first_char = self._formula[self._index];
 
@@ -203,25 +254,23 @@ pub mod equation_parser {
 
                 //println!("Par index: {}", index);
 
-                //Search for a number after
-                let mut num_index = index;
+                match get_num_index(&self._formula[index+1..]) {
+                    Ok((_, last, ratio)) => {
+                        let slice = &self._formula[self._index+1..index];
 
-                for ch in &self._formula[index+1..] {
-                    if (*ch < 48 || *ch > 57) && *ch != 46 {
-                        break;
+                        let str_slice = unsafe { std::str::from_utf8_unchecked(&self._formula[self._index..index+last+1]) };
+
+                        //Advance the iterator forward
+                        self._index = index+last+1;
+
+                        Some(TokenType::Group(slice, str_slice,ratio))
+                    },
+                    Err(error) => {
+                        Some(TokenType::Error(unsafe { std::str::from_utf8_unchecked(&self._formula[index+1..]) }, error))
                     }
-                    num_index += 1;
                 }
 
-                let ratio = float_string_to_ratio(&self._formula[index+1..num_index+1]);
-                let slice = &self._formula[self._index+1..index];
 
-                let str_slice = unsafe { std::str::from_utf8_unchecked(&self._formula[self._index..num_index+1]) };
-
-                //Advance the iterator forward
-                self._index = num_index+1;
-
-                Some(TokenType::Group(slice, str_slice,ratio))
             }
             else {
                 // If its not, we look to COMPONENT_LIST to identify the token

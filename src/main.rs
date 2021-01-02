@@ -18,7 +18,7 @@ use clap::{Arg, App};
 
 use std::time::{Instant};
 
-fn parse_group<'a>(group: & 'a [u8], map: & mut HashMap<& 'a [u8], Ratio<i32>>, scalar: Ratio<i32>) -> Option<& 'a [u8]> {
+fn parse_group<'a>(group: & 'a [u8], map: & mut HashMap<& 'a [u8], Ratio<i32>>, scalar: Ratio<i32>) -> Option<String> {
 
     for token in TokenIterator::new(group) {
         match token {
@@ -42,10 +42,16 @@ fn parse_group<'a>(group: & 'a [u8], map: & mut HashMap<& 'a [u8], Ratio<i32>>, 
                 }
             },
             TokenType::Invalid(c) => {
-                return Some(c)
+                return Some(format!("Invalid token '{}'", unsafe { std::str::from_utf8_unchecked(c) }));
             },
-            _ => {
-
+            TokenType::Error(slice, error) => {
+                return Some(format!("{} ({})", error, slice));
+            },
+            TokenType::Separator(sep) => {
+                return Some(format!("Invalid symbol ({}) found within parenthesis", sep))
+                //Separator within group, error
+            },
+            TokenType::Whitespace => {
             }
         }
     }
@@ -85,7 +91,7 @@ fn better_solve_equation(equation: &str, verbose: bool) -> Result<String, String
 
     for ch in equation_asbytes {
         if *ch > 127 {
-            return Err(format!("Invalid character detected. Please only use valid Ascii characters (Unicode is not supported)"));
+            return Err(String::from("Invalid character detected. Please only use valid Ascii characters (Unicode is not supported)"));
         }
 
         //Get the total number of equals signs
@@ -100,11 +106,11 @@ fn better_solve_equation(equation: &str, verbose: bool) -> Result<String, String
     }
 
     if equals_count != 1 {
-        return Err(format!("Formula must have exactly one equals"));
+        return Err(String::from("Formula must have exactly one equals"));
     }
 
     if equals_index == 0 || equals_index == equation_asbytes.len() - 1 {
-        return Err(format!("Formula must have at least one reactant and one product"));
+        return Err(String::from("Formula must have at least one reactant and one product"));
     }
 
     //Perform the initial run looking for ions and symbols
@@ -114,14 +120,28 @@ fn better_solve_equation(equation: &str, verbose: bool) -> Result<String, String
                 master_table.insert(s, Ratio::zero());
             },
             TokenType::Group(group, _, _) => {
-                parse_group(group, & mut master_table, Ratio::zero());
+                let err = parse_group(group, & mut master_table, Ratio::zero());
+                if err.is_some() {
+                    return Err(err.unwrap());
+                };
+            },
+            TokenType::Invalid(c) => {
+
+                return Err(format!("Invalid token '{}'", unsafe { std::str::from_utf8_unchecked(c) }));
+
+            },
+            TokenType::Error(slice, error) => {
+                return Err(format!("{} ({})", error, slice));
+            },
+            TokenType::Whitespace => {
+            },
+            TokenType::Separator(_) => {
             }
-            _ => {}
         }
     }
 
     if equals_count != 1 {
-        return Err(format!("Equation must contain exactly one equals sign ('=')"));
+        return Err(String::from("Equation must contain exactly one equals sign ('=')"));
     }
 
     //if equation_asbytes.len() < {}
@@ -146,26 +166,19 @@ fn better_solve_equation(equation: &str, verbose: bool) -> Result<String, String
         println!("Molecule matrix");
     }
 
+    //Iterate over each token, adding columns to the matrix as we find new molecules
     for token in TokenIterator::new(equation_asbytes) {
 
 
         match token {
             TokenType::Symbol(element, _, quantity) => {
-
                 let num_ref = symbol_table.get_mut(element).unwrap();
                 *num_ref += quantity * sign;
-
             },
             TokenType::Group(group, _, quantity) => {
-                let err = parse_group(group, & mut symbol_table, quantity * sign);
-                if err.is_some() {
-                    return Err(format!("Invalid token '{}' in formula {}", unsafe { std::str::from_utf8_unchecked(err.unwrap()) }, equation));
-                }
+                parse_group(group, & mut symbol_table, quantity * sign);
             },
-            TokenType::Invalid(c) => {
-
-                return Err(format!("Invalid token '{}' in formula {}", unsafe { std::str::from_utf8_unchecked(c) }, equation));
-
+            TokenType::Invalid(_) => {
             },
             TokenType::Separator(sep) => {
 
@@ -177,7 +190,8 @@ fn better_solve_equation(equation: &str, verbose: bool) -> Result<String, String
                 }
             },
             TokenType::Whitespace => {
-                // println!("Whitespace");
+            },
+            TokenType::Error(_,_) => {
             }
         }
 
@@ -207,8 +221,8 @@ fn better_solve_equation(equation: &str, verbose: bool) -> Result<String, String
                 matrix.print();
 
                 println!("Solution vector");
-                for quantity in solution.iter() {
-                    print!("{} ", quantity);
+                for coeff in solution.iter() {
+                    print!("{} ", coeff);
                 }
                 println!("\n");
             }
@@ -278,7 +292,7 @@ fn better_solve_equation(equation: &str, verbose: bool) -> Result<String, String
 fn main() {
 
     let matches = App::new("Chemical Equation Balancer")
-        .version("0.2.1")
+        .version("0.2.2")
         .author("Will Cooper")
         .about("Command line tool to balance chemical equations")
         .arg(Arg::with_name("equation")
@@ -292,11 +306,6 @@ fn main() {
             .long("verbose")
             .takes_value(false)
             .help("Displays intermediate steps"))
-        .arg(Arg::with_name("duration")
-            .short("d")
-            .long("duration")
-            .takes_value(false)
-            .help("Shows calculation duration"))
         .get_matches();
 
     let start = Instant::now();
@@ -312,13 +321,10 @@ fn main() {
         Ok(s) => {
             if verbose {
                 println!("Equation: {}", s);
+                println!("\nElapsed: {:?}", start.elapsed());
             }
             else {
                 println!("{}", s);
-            }
-
-            if matches.is_present("duration") {
-                println!("\nElapsed: {:?}", start.elapsed());
             }
         }
         ,

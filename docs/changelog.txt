@@ -1,3 +1,16 @@
+Version 0.2.2
+    - We now detect infinite solutions, and warn user accordingly
+    - We now detect negative coefficients and warn user
+    - Group component in token iterator now uses get_num_index function to get quantity
+    - Since conversion from string to num can fail, float_string_to_ratio now returns a Result, which is propagated
+    - We can now parse rational numbers too!!!
+    - Showing the duration is now included in --verbose, --duration is removed
+    - Added Error token to give more information than Invalid alone
+    - Equation validation (via TokenIterator) is now performed in the first parse, not the second
+    - parse_group now uses String instead of &str in its Result
+    - format! changed to String::from where possible
+    - We now detect invalid charges where the number is not at the beginning or at the end  i.e. {+22-}
+
 Version 0.2.1
     - We now reconstruct the final equation correctly
     - We now detect invalid characters within the charge component
