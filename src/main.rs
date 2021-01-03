@@ -50,8 +50,6 @@ fn parse_group<'a>(group: & 'a [u8], map: & mut HashMap<& 'a [u8], Ratio<i32>>, 
             TokenType::Separator(sep) => {
                 return Some(format!("Invalid symbol ({}) found within parenthesis", sep))
                 //Separator within group, error
-            },
-            TokenType::Whitespace => {
             }
         }
     }
@@ -80,11 +78,9 @@ fn send_column<'a>(table: & mut HashMap<&'a[u8], Ratio<i32>>,col: & mut Vec<Rati
     *table = master.clone();
 }
 
-fn better_solve_equation(equation: &str, verbose: bool) -> Result<String, String> {
+fn solve_equation(equation_asbytes: &[u8], verbose: bool) -> Result<String, String> {
 
     let mut master_table = HashMap::<&[u8], Ratio<i32>>::new();
-
-    let equation_asbytes = equation.as_bytes();
 
     let mut equals_count = 0;
     let mut equals_index = 0;
@@ -132,8 +128,6 @@ fn better_solve_equation(equation: &str, verbose: bool) -> Result<String, String
             },
             TokenType::Error(slice, error) => {
                 return Err(format!("{} ({})", error, slice));
-            },
-            TokenType::Whitespace => {
             },
             TokenType::Separator(_) => {
             }
@@ -189,8 +183,6 @@ fn better_solve_equation(equation: &str, verbose: bool) -> Result<String, String
                     sign = -Ratio::<i32>::one();
                 }
             },
-            TokenType::Whitespace => {
-            },
             TokenType::Error(_,_) => {
             }
         }
@@ -227,7 +219,7 @@ fn better_solve_equation(equation: &str, verbose: bool) -> Result<String, String
                 println!("\n");
             }
 
-            let mut result = String::with_capacity(equation.len());
+            let mut result = String::with_capacity(equation_asbytes.len());
 
             if solution[0] != 1 {
                 result = format!("{}{}", result, solution[0])
@@ -289,10 +281,22 @@ fn better_solve_equation(equation: &str, verbose: bool) -> Result<String, String
 
 }
 
+fn remove_whitespace(string: & str) -> String {
+    let mut result = String::new();
+
+    for ch in string.as_bytes() {
+        if *ch != 9 && *ch != 10 && *ch != 13 && *ch != 32 {
+            result.push(char::from(*ch));
+        }
+    }
+
+    result
+}
+
 fn main() {
 
     let matches = App::new("Chemical Equation Balancer")
-        .version("0.2.2")
+        .version("0.2.3")
         .author("Will Cooper")
         .about("Command line tool to balance chemical equations")
         .arg(Arg::with_name("equation")
@@ -306,26 +310,40 @@ fn main() {
             .long("verbose")
             .takes_value(false)
             .help("Displays intermediate steps"))
+        .arg(Arg::with_name("duration")
+            .short("d")
+            .long("duration")
+            .takes_value(false)
+            .help("Displays computation time"))
         .get_matches();
 
     let start = Instant::now();
 
     let verbose = matches.is_present("verbose");
 
-    let balance = better_solve_equation(
-        matches.value_of("equation").unwrap(),
+    let cleaned_equation = remove_whitespace(matches.value_of("equation").unwrap());
+
+    let balance = solve_equation(
+        cleaned_equation.as_bytes(),
         verbose);
 
 
     match balance {
         Ok(s) => {
+
+
             if verbose {
                 println!("Equation: {}", s);
-                println!("\nElapsed: {:?}", start.elapsed());
             }
             else {
                 println!("{}", s);
             }
+
+            if matches.is_present("duration") {
+                println!("\nElapsed: {:?}", start.elapsed());
+            }
+
+
         }
         ,
         Err(e) => println!("Cannot solve equation. {}", e)

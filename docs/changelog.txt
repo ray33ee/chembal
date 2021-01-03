@@ -1,3 +1,10 @@
+Version 0.2.3
+    - We now remove whitespace before parsing, to make processing easier
+    - Whitespace enum in TokenType has now been removed
+    - solve_equation now takes a byte slice instead of a str slice
+    - Groups with an implicit quantity (i.e. a quantity of one), for example (OH), (Fe), etc. are parsed correctly
+    - --duration option added back in, used to show more accurate duration (i.e. without lengthy print calls)
+
 Version 0.2.2
     - We now detect infinite solutions, and warn user accordingly
     - We now detect negative coefficients and warn user

@@ -93,7 +93,6 @@ pub mod equation_parser {
         Symbol(& 'a [u8], & 'a str, Ratio<i32>), // A symbol, followed by an optional quantity, i.e. H, Na2, Mg3, etc.
         Group(& 'a [u8], & 'a str, Ratio<i32>), // A series of tokens within brackets, with optional quantity, i.e. (OH)2, (CH3), (SO4)2, etc.
         Separator(u8), //Molecule separator, either a plus or an equals
-        Whitespace, //Any amount of contiguous whitespace
         Invalid(& 'a [u8]),
         Error(& 'a str, String)
     }
@@ -131,7 +130,7 @@ pub mod equation_parser {
             }
 
             #[allow(non_snake_case)]
-            let COMPONENT_LIST: [TokenComponent; 5] = [
+            let COMPONENT_LIST: [TokenComponent; 4] = [
                 TokenComponent { //Symbol
                     _start_condition: |ch| *ch >= 65 && *ch <= 90,
                     _end_condition: |ch| (*ch < 48 || *ch > 57) && (*ch < 97 || *ch > 122) && *ch != '.' as u8,
@@ -143,14 +142,6 @@ pub mod equation_parser {
                             Err(error) =>
                                 TokenType::Error(unsafe { std::str::from_utf8_unchecked(&tok_str) }, error)
                         }
-                    },
-                    _ignore_end: false
-                },
-                TokenComponent { //Whitespace
-                    _start_condition: |ch| *ch == 9 || *ch == 10 || *ch == 13 || *ch == 32,
-                    _end_condition: |ch| *ch != 9 && *ch != 10 && *ch != 13 && *ch != 32,
-                    _parse: |_tok_str: & 'a [u8]| {
-                        TokenType::Whitespace
                     },
                     _ignore_end: false
                 },
@@ -254,23 +245,35 @@ pub mod equation_parser {
 
                 //println!("Par index: {}", index);
 
-                match get_num_index(&self._formula[index+1..]) {
-                    Ok((_, last, ratio)) => {
-                        let slice = &self._formula[self._index+1..index];
+                let next_char = self._formula[index+1];
 
-                        let str_slice = unsafe { std::str::from_utf8_unchecked(&self._formula[self._index..index+last+1]) };
+                let slice = &self._formula[self._index+1..index];
 
-                        //Advance the iterator forward
-                        self._index = index+last+1;
 
-                        Some(TokenType::Group(slice, str_slice,ratio))
-                    },
-                    Err(error) => {
-                        Some(TokenType::Error(unsafe { std::str::from_utf8_unchecked(&self._formula[index+1..]) }, error))
+                if (next_char < 48 || next_char > 57) && next_char != '.' as u8 {
+                    let str_slice = unsafe { std::str::from_utf8_unchecked(&self._formula[self._index..index+1]) };
+
+                    //Advance the iterator forward
+                    self._index = index+1;
+
+                    Some(TokenType::Group(slice, str_slice,Ratio::one()))
+                }
+                else {
+                    match get_num_index(&self._formula[index+1..]) {
+                        Ok((_, last, ratio)) => {
+
+                            let str_slice = unsafe { std::str::from_utf8_unchecked(&self._formula[self._index..index+last+1]) };
+
+                            //Advance the iterator forward
+                            self._index = index+last+1;
+
+                            Some(TokenType::Group(slice, str_slice,ratio))
+                        },
+                        Err(error) => {
+                            Some(TokenType::Error(unsafe { std::str::from_utf8_unchecked(&self._formula[index+1..]) }, error))
+                        }
                     }
                 }
-
-
             }
             else {
                 // If its not, we look to COMPONENT_LIST to identify the token

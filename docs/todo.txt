@@ -1,3 +1,1 @@
 
-- Figure out a way to parse 'H 2' as 'H2' and not as 'H', ' ' and '2'.
-- Make sure Groups with quantity 1 are parsed correctly, i.e. (S)
